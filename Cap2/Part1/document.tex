@@ -1,0 +1,401 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% This project aims to create the UNAL template for presentation.               %%
+%% author:Félix Julián Gutiérrez                                                 %%
+%% contacts:                                                                     %%
+%%    e-mail: fjgutierrezb@unal.edu.co                                           %%
+%%   www.unal.edu.co                                                             %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass{libs/ufc_format}
+% Inserting the preamble file with the packages
+\input{libs/preamble.tex}
+% Inserting the references file
+\bibliography{references.bib}
+
+% Title
+\title[Sistemas Operativos]{\huge\textbf{}}
+% Subtitle
+\subtitle{\textbf{El Sistema Operativo XV6 - Capitulo 2 - Parte 1}}
+% Author of the presentation
+\author{Carlos Santiago Sandoval Casallas}
+% Institute's Name
+\institute[UNAL]{
+  % email for contact
+  \normalsize{\email{csandovalc@unal.edu.co}}
+  \newline
+  % Department Name
+  \department{Departamento de Ingeniería de Sistemas e Industrial}
+  \newline
+  % university name
+  \ufc
+}
+% date of the presentation
+\date{\today}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Start Document of the Presentation                                           %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+% insert the code style
+\input{libs/code_style}
+
+%% ---------------------------------------------------------------------------
+% First frame (with tile, subtitle, ...)
+\begin{frame}
+  \maketitle
+\end{frame}
+
+%% ---------------------------------------------------------------------------
+% Second frame
+\begin{frame}{Agenda}
+  % \begin{multicols}{2}
+  \tableofcontents
+  % \end{multicols}
+\end{frame}
+%% ---------------------------------------------------------------------------
+\section{Organización del SO}
+\begin{frame}{Introducción}
+  Es fundamental que un sistema operativo \emph{admita múltiples actividades a la vez}, el SO debe compartir los recursos disponibles entre todos los procesos, garantizando que todos tengan la oportunidad de ejecutarse.
+
+  \vspace{0.2cm}
+
+  El SO también debe brindar \emph{aislamiento entre los procesos}, de tal manera que si un proceso falla o no funciona correctamente, no afecte a los procesos que no dependen de este proceso con errores. El aislamiento completo de procesos es demasiado \textit{fuerte}, ya que se debe permitir que los procesos interactúen intencionadamente. Una solución a este tipo de situaciones es la \textit{\example{pipe}} o tubería.
+
+  \vspace{0.2cm}
+
+  \begin{block}{Requisitos del Sistema Operativo}
+    El SO debe brindar: multiplexación, aislamiento e interacción. \cite{xv6_book}
+  \end{block}
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}{Objetivos del capítulo}
+  El capítulo 2 proporciona una descripción general sobre la organización que implementan muchos sistemas operativos basados en Unix, se centrara principalmente en los diseños convencionales en un \emph{kernel monolítico}.
+
+  \vspace{0.2cm}
+
+  Este capítulo también proporcionará una descripción más general de un proceso en XV6 y la creación del primer proceso cuando arranca el SO.
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}{Entorno}
+  XV6 se ejecuta en un microprocesador multinúcleo RISC-V \cite{xv6_book}, y parte significativa de sus funcionalidades de bajo nivel es específica de RISC-V.
+
+  \vspace{0.3cm}
+
+  RISC-V es una CPU de 64 bits, y XV6 está escrito en “LP64”C, esto significa que los punteros largos \textbf{(LP)} en el lenguaje de programación C, son de 64 bits, pero \textit{int} es de 32 bits.
+
+  \begin{block}{Arquitectura}
+    El libro \cite{xv6_book}, asumirá que el lector ha realizado programación a nivel de máquina en \emph{cualquier} arquitectura, así que se presentaran las ideas propias y específicas de RISC-V a medida que sea necesario.
+  \end{block}
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}{Referencias para RISC-V}
+  En el libro \cite{xv6_book} se brindan algunas referencias útiles para RISC-V como:
+  \begin{itemize}
+    \item The RISC-V Reader: An Open Architecture Atlas. \cite{riscv}
+    \item El ISA a nivel de usuario. \cite{riscv:user}
+    \item El ISA de arquitectura privilegiada. \cite{riscv:priv}
+  \end{itemize}
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}{Hardware simulado}
+  La CPU de una computadora completa está rodeada de hardware de soporte, una gran parte en forma de interfaces de E/S \cite{xv6_book}.
+
+  \vspace{0.2cm}
+
+  XV6 está escrito para el hardware de soporte simulado, este es brindado por \emph{QEMU}, dentro del hardware de soporte simulado se incluye:
+  \begin{itemize}
+    \item RAM.
+    \item ROM la cual contiene código de inicio.
+    \item Conexión en serie al teclado y la pantalla del usuario.
+    \item Un disco para almacenamiento.
+  \end{itemize}
+\end{frame}
+%% ---------------------------------------------------------------------------
+\section{Abstracción de recursos físicos}
+\begin{frame}{¿Por qué tener un SO?}
+  ¿Realmente es necesario contar con un sistema operativo? Esto es un cuestionamiento válido, dado que se pueden implementar las llamadas al sistema como una librería que emplearían las aplicaciones. Esto permitiría incluso que cada aplicación tenga su propia librería adaptada a sus necesidades, además de permitir emplear de mejor manera los recursos disponibles. \emph{(Incluso algunos sistemas operativos para sistemas embebidos o sistemas en tiempo real, se organizan de esta manera)}
+
+  \vspace{0.3cm}
+
+  El enfoque anterior tiene un problema, y es que su funcionamiento se basa en la confianza. Los procesos deberán cooperar entre sí \emph{(respetar los recursos compartidos, ceder recursos para que sean aprovechados por otros procesos)} y confiar en que no se presenten errores.
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}
+  El enfoque anterior tiene un problema, y es que su funcionamiento se basa en la confianza. Los procesos deberán cooperar entre sí \emph{(respetar los recursos compartidos, ceder recursos para que sean aprovechados por otros procesos)} y confiar en que no se presenten errores.
+
+  \vspace{0.3cm}
+
+  Esto no es común, al contrario, lo más típico es que las aplicaciones no confíen entre sí y tengan errores, por lo que generalmente se requiere de un aislamiento de procesos más fuertes que el propuesto en el sistema cooperativo.
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}{Aislamiento}
+  Una forma de proporcionar un aislamiento fuerte, es prohibir a que las aplicaciones accedan directamente a recursos de hardware confidenciales \cite{xv6_book}, esto mediante la abstracción de recursos.
+
+  \vspace{0.2cm}
+
+  Ya hemos visto esta estrategia, por ejemplo, el brindar acceso a diferentes archivos únicamente mediante operaciones de: apertura, lectura, escritura y cierre, en lugar de acceder directamente al almacenamiento en disco. Por lo que la administración del disco es una responsabilidad cedida al SO, siendo incluso más conveniente para las aplicaciones.
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}
+  De igual manera, en sistemas basados en Unix, se evidencia la distribución de la CPU entre los procesos, guardando y restaurando el estado del proceso según sea necesario, esto elimina la necesidad de que las aplicaciones tengan que tener una administración de recursos enfocada al tiempo compartido.\newline
+  \example{Esto permite que el SO comparta CPU incluso con procesos que están en bucles infinitos.}
+\end{frame}
+%% ---------------------------------------------------------------------------
+\section{Modo usuario, supervisor y sistema de llamadas}
+\begin{frame}{Conmutación por error}
+  Parte importante del aislamiento fuerte es definir un límite estricto entre las aplicaciones y el sistema operativo, si una aplicación falla, no es conveniente que esto afecte al SO u otras aplicaciones. El SO debe poder limpiar la aplicación fallida y continuar ejecutando otras aplicaciones.
+
+  \vspace{0.3cm}
+
+  De igual manera, el SO debe garantizar que ninguna aplicación tenga la capacidad de leer o modificar las estructuras de datos e instrucciones del SO y tampoco acceder a memoria de otros procesos.
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}{Aislamiento soportado por hardware}
+  RISC-V presenta tres modos en los que la CPU puede ejecutar instrucciones:
+  \begin{itemize}
+    \item \textbf{Modo máquina:} Las instrucciones ejecutadas en este modo tienen \emph{todos los privilegios}, principalmente se emplea en la configuración de la computadora. \newline
+    \item \textbf{Modo supervisor:} En este modo, la CPU puede ejecutar instrucciones privilegiadas. \newline
+      \example{Habilitar/Deshabilitar interrupciones, leer y escribir el registro que contiene la dirección de una tabla de paginas, etc.}
+    \item \textbf{Modo usuario:} Este es el nivel con menos privilegios, donde las instrucciones son básicas. \newline
+      \example{Sumar números.}
+  \end{itemize}
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}
+  La CPU inicia en modo máquina, aquí XV6 realiza algunas configuraciones para el arranque de la computadora \example{(por ej. configuración de la memoria virtual)} y luego cambia a modo supervisor. \newline \vspace{0.3cm}
+  El modo supervisor es también considerado \emph{espacio del kernel}, aquí se permite la ejecución de instrucciones privilegiadas. En caso de que un programa por fuera del espacio del kernel intente ejecutar instrucciones privilegiadas, \emph{la CPU no ejecutara la instrucción}, cambiara a modo supervisor, y desde este modo finalizara la aplicación, dado que intento hacer algo que no tiene permitido.
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}{Espacio de kernel - Espacio de usuario}
+  Si una aplicación quiere emplear una función del kernel, debe hacer \example{una transición al kernel}; dado que no puede invocar dicha función directamente. Para esto, la CPU proporciona una \emph{instrucción especial} que cambia del modo usuario al modo supervisor, ingresando al espacio de kernel en un punto definido por el kernel. \newline
+  En el caso de RISC-V, es la instrucción \emph{ecall}.
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}
+  Una vez la CPU se encuentra en modo supervisor, el kernel puede validar los argumentos de la llamada al sistema \example{(por ej. verificar si la dirección de memoria pasada a la syscall hace parte de la memoria de la aplicación)}, decidir si la llamada solicitada puede ser ejecutada por la aplicación \example{(por ej. verificar si la aplicación tiene el permiso para escribir el archivo especificado)}, y con base en estas validaciones llevar a cabo o negar la ejecución.
+
+  \begin{block}{Seguridad respecto al punto de entrada al kernel}
+    Es importante que el kernel controle el punto de entrada al modo supervisor; si no fuese así, una aplicación malintencionada podría decidir el punto de entrada, permitiéndole, por ejemplo, ingresar al kernel en un punto donde se omite la validación de argumentos.
+  \end{block}
+\end{frame}
+%% ---------------------------------------------------------------------------
+\section{Organización del kernel}
+\begin{frame}{Diseño}
+  Como se menciona anteriormente, una decisión clave en la implementación del sistema operativo, es que este se ejecute en el modo supervisor de la CPU.
+
+  \vspace{0.3cm}
+
+  Pero existen otros factores a considerar, por ejemplo, la opción de que todo el sistema operativo resida en el kernel, esto permite que todas las llamadas al sistema se ejecuten en el modo supervisor. Esta organización se llama \emph{kernel monolítico}.
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}{Kernel monolítico}
+  En el diseño de kernel monolítico, todo el sistema operativo se ejecuta con todos los privilegios de hardware, es conveniente porque el diseñador del SO no tiene que decidir que partes del SO no requieren de privilegios completos sobre el hardware, adicionalmente, facilita la cooperación entre distintas partes del SO. \newline
+  \example{Un sistema operativo puede tener un caché de búfer que puede ser compartido tanto por el sistema de archivos como por el sistema de memoria virtual.}
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}{Desventajas}
+  Una desventaja de la organización monolítica es que las interfaces entre las diferentes partes del sistema operativo suelen ser complejas, por lo que aumenta la probabilidad de cometer un error.
+
+  \vspace{0.3cm}
+
+  En esta metodología de diseño, un error es fatal, dado que un error en el modo supervisor a menudo ocasionará una falla del kernel, causando una falla en la computadora y las aplicaciones en ejecución, por lo que es necesario reiniciar.
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}{Microkernel}
+  Con el fin de reducir estos errores en el kernel, los diseñadores pueden minimizar la cantidad de código del sistema operativo que se ejecuta en modo supervisor, ejecutando la mayor parte del sistema en modo usuario. \emph{Esta organización se llama microkernel.} \newline
+
+  \begin{figure}
+    \centering
+    \caption{Estructura de un microkernel y método de comunicación}
+    \includegraphics[scale=0.3]{libs/img/Estructura_microkernel.png}
+    \source{Elaboración propia. Basado en xv6: a simple, Unix-like teaching operating system \cite{xv6_book}}
+    \label{fig:Estructura Micro-Kernel}
+  \end{figure}
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}
+  En la figura \ref{fig:Estructura Micro-Kernel} se ilustra como el \textbf{sistema de archivos} se ejecuta como un proceso a nivel de usuario, estos servicios del sistema operativo que se ejecutan como procesos se denominan \emph{servidores}.
+
+  \vspace{0.2cm}
+
+  Para que las aplicaciones interactúen con los servidores del sistema operativo, el kernel brinda mecanismos de comunicación entre procesos para enviar mensajes de un proceso en espacio de usuario a otro. \newline
+  \example{Si una aplicación como el Shell desea leer o escribir un archivo, envía un mensaje al servidor de archivos y espera una respuesta \cite{xv6_book}.}
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}
+  En un microkernel, la interfaz de llamadas al sistema es simple, consta de algunas funciones de bajo nivel para iniciar las aplicaciones, realizar el envío de mensajes entre procesos, acceder a hardware de dispositivo, etc. Esto permite que el kernel sea simple, ya que la mayor parte reside en los servidores que se encuentran a nivel de usuario.
+
+  \vspace{0.2cm}
+
+  En el mundo real, ambos diseños \textbf{(kernel monolítico - microkernel)}, son populares, incluso pueden combinarse hasta cierto punto.\newline
+
+  \vspace{0.2cm}
+
+  Por ejemplo, tomemos el caso de Linux, este cuenta con una peculiaridad, y es que algunas funciones del SO se ejecutan en servidores a nivel de usuario, por ejemplo \example{el sistema de ventanas}. \newline
+
+  \vspace{0.2cm}
+
+  Por otro lado, existen ciertos microkernels que ejecutan algunos de los servicios de nivel de usuario en el espacio del kernel con el fin de obtener mejor rendimiento.
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}
+  Actualmente, existe un gran debate sobre qué implementación es mejor; lamentablemente, no existe evidencia concluyente que demuestre la superioridad de un modelo respecto al otro. Adicionalmente, este abre una nueva discusión sobre la definición de que significa “mejor”: mayor velocidad de rendimiento, tamaño de código más pequeño, fiabilidad del kernel, fiabilidad del sistema operativo completo, etc.
+
+  \vspace{0.3cm}
+
+  Algunos sistemas operativos modernos tienen kernels monolíticos porque fueron construidos de esta manera, y existen pocos incentivos para pasarlos a un diseño de un microkernel puro, por lo que desarrollar nuevas características se torna más importante que la reconstrucción de un sistema operativo completo.
+\end{frame}
+%% ---------------------------------------------------------------------------
+\begin{frame}{XV6}
+  XV6 tiene una implementación monolítica, como gran parte de los sistemas basados en Unix. La interfaz del kernel corresponde a la interfaz del sistema operativo, y el kernel implementa el sistema operativo completo \cite{xv6_book}. Por el tamaño reducido de XV6, su kernel es más pequeño que algunos microkernels, pero a nivel conceptual es monolítico. \newline
+  \emph{En el material se abordarán las ideas centrales entre ambos diseños.}
+\end{frame}
+%% ---------------------------------------------------------------------------
+
+% \section{Código: Organización de XV6}
+% %% ---------------------------------------------------------------------------
+% \section{Procesos}
+% %% ---------------------------------------------------------------------------
+% \section{Código: Empezando en XV6, el primer proceso y llamada al sistema}
+% %% ---------------------------------------------------------------------------
+% \section{Modelo de seguridad}
+% %% ---------------------------------------------------------------------------
+% \section{Mundo real}
+
+% \section{Tablas de páginas}
+% \section{Hardware de paginación}
+% \section{Espacio de direcciones del kernel}
+% \section{Código: Creando un espacio de direcciones}
+% \section{Asignación de memoria física}
+% \section{Código: Asignador de memoria física}
+% \section{Espacio de direcciones de un proceso}
+% \section{Código: sbrk}
+% \section{Código: exec}
+% \section{Mundo real}
+
+% %% ---------------------------------------------------------------------------
+% \subsection{subsección 2}
+% \begin{frame}{Bloques}
+%     % Blocks styles
+%     \begin{block}{Bloque azul}
+%         fondo bloque en blanco.
+%     \end{block}
+
+%     \begin{alertblock}{Bloque de alerta}
+%         fondo bloque en blanco.
+%     \end{alertblock}
+
+%     \begin{exampleblock}{Bloque de ejemplo}
+%         fondo bloque en blanco..
+%     \end{exampleblock}
+% \end{frame}
+
+% %% ---------------------------------------------------------------------------
+% \subsection{uso de cajas con enfasis}
+% \begin{frame}{Para el uso con cajas, en especial programación}
+%     \successbox{cajas de test}
+
+%     \pause
+
+%     \alertbox{Alerta de test}
+
+%     \pause
+
+%     \simplebox{Estado de test}
+% \end{frame}
+
+% %% ---------------------------------------------------------------------------
+% \subsection{Algoritmos}
+% \begin{frame}{para Algoritmos (Pseudocódigo)}
+%     \begin{algorithm}[H]
+%         \SetAlgoLined
+%         \LinesNumbered
+%         \SetKwInOut{Input}{input}
+%         \SetKwInOut{Output}{output}
+%         \Input{x: float, y: float}
+%         \Output{r: float}
+%         \While{True}{
+%           r = x + y\;
+%           \eIf{r >= 30}{
+%            ``O valor de $r$ é maior ou iqual a 10.''\;
+%            break\;
+%            }{
+%            ``O valor de $r$ = '', r\;
+%           }
+%          }
+%          \caption{Algorithm Example}
+%     \end{algorithm}
+% \end{frame}
+
+% %% ---------------------------------------------------------------------------
+
+% \begin{frame}{Insertando Algoritmos}
+%     \lstset{language=Python}
+%     \lstinputlisting[language=Python]{code/main.py}
+% \end{frame}
+
+% %% ---------------------------------------------------------------------------
+% \begin{frame}{Insertando Algoritmos}
+%     \lstinputlisting[language=C]{code/source.c}
+% \end{frame}
+
+% %% ---------------------------------------------------------------------------
+% \begin{frame}{Insertando Algoritmos}
+%     \lstinputlisting[language=Java]{code/helloworld.java}
+% \end{frame}
+
+% %% ---------------------------------------------------------------------------
+% \begin{frame}{Insertando Algoritmos}
+%     \lstinputlisting[language=HTML]{code/index.html}
+% \end{frame}
+
+% %% ---------------------------------------------------------------------------
+% % This frame show an example to insert multicolumns
+% \section{Sección II}
+% \begin{frame}{Sección II}
+%     \begin{columns}{}
+%         \begin{column}{0.5\textwidth}
+%             \justify
+%            utilizado y justificado para 2 columnas
+%         \end{column}
+%         \begin{column}{0.5\textwidth}
+%             \justify
+%            espacioentre columnas para un segundo argumento
+%         \end{column}
+%     \end{columns}
+% \end{frame}
+
+% %% ---------------------------------------------------------------------------
+% % This frame show an example to insert figures
+% \section{sección III}
+% \begin{frame}{Sección III - Figuras}
+%     \begin{figure}
+%         \centering
+%         \caption{logo UNAL.}
+%         \includegraphics[scale=0.3]{libs/UNAL_logo.jpg}
+%         \source{Obtenido del sitio oficial \cite{xv6} \cite{xv6_book}}
+%         \label{fig:Logo UNAL}
+%     \end{figure}
+% \end{frame}
+
+%% ---------------------------------------------------------------------------
+% Reference frames
+\begin{frame}[allowframebreaks]
+  \frametitle{Referencias}
+  \printbibliography
+\end{frame}
+
+%% ---------------------------------------------------------------------------
+% Final frame
+\begin{frame}
+  \centering
+  \huge{\textbf{\example{Gracias por la atención}}}
+
+  \vspace{1cm}
+
+  \Large{\textbf{Contacto:}}
+  \newline
+  \vspace*{0.5cm}
+  \large{\email{csandovalc@unal.edu.co}}
+\end{frame}
+
+\end{document}
